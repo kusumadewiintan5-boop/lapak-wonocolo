@@ -78,11 +78,8 @@ async function loadShops(){
   const uid = session && session.user.id;
   myShop = uid ? shops.find(s=>s.owner===uid) || null : null;
   usingExamples = shops.filter(s=>s.tampil).length===0 && !isAdmin;
-  if (filter.shop && !source().some(s=>s.id===filter.shop)){
-    if (location.hash.startsWith("#toko/")){ toast("Lapak tidak ditemukan atau sedang disembunyikan"); setHash("#belanja"); scrollPending=false; }
-    filter.shop="";
-  }
   shopsLoaded = true;
+  checkShop();
   render(); renderDesk(); tryOpenPending(); maybeScroll();
 }
 function source(){ return usingExamples ? EXAMPLES : shops; }
@@ -410,6 +407,11 @@ function applyHash(){
     pendingProduct=m[1]; scrollPending=true;
   }
 }
+function checkShop(){
+  if (!shopsLoaded || !filter.shop || source().some(s=>s.id===filter.shop)) return;
+  if (location.hash.startsWith("#toko/")){ toast("Lapak tidak ditemukan atau sedang disembunyikan"); setHash("#belanja"); scrollPending=false; }
+  filter.shop="";
+}
 function tryOpenPending(){
   if (!pendingProduct || !shopsLoaded) return;
   const id=pendingProduct; pendingProduct="";
@@ -429,7 +431,7 @@ function route(){
   $("#tab-belanja").setAttribute("aria-current",lapak?"false":"page");
   $("#tab-lapak").setAttribute("aria-current",lapak?"page":"false");
   if (lapak) renderDesk();
-  else { applyHash(); render(); tryOpenPending(); maybeScroll(); }
+  else { applyHash(); checkShop(); render(); tryOpenPending(); maybeScroll(); }
 }
 addEventListener("hashchange",()=>{ const deep=/^#(toko|produk)\//.test(location.hash); route(); if(!deep) scrollTo(0,0); });
 
