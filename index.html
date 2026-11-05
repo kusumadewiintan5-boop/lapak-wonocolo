@@ -77,6 +77,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--leaf);outline:none}
 .sect-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:8px 0 12px;flex-wrap:wrap}
 .sect-h h2{font-family:var(--display);font-weight:400;font-size:26px}
 .sub{color:var(--muted);font-size:14px}
+.sect-h .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.linkbox{background:var(--leaf-soft);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.linkbox .grow{flex:1;min-width:220px}
+.linkbox code{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px}
 .shops{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:22px;scroll-snap-type:x proximity}
 .shop{flex:0 0 220px;scroll-snap-align:start;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r);padding:12px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center}
 .shop[aria-pressed="true"]{border-color:var(--leaf);box-shadow:0 0 0 2px var(--leaf) inset}
@@ -210,7 +214,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--leaf);outline:none}
       <div class="shops" id="shops"></div>
     </div>
 
-    <div class="sect-h"><h2 id="grid-title">Semua produk</h2><span class="sub" id="grid-count"></span></div>
+    <div class="sect-h" id="grid-head"><h2 id="grid-title">Semua produk</h2>
+      <div class="acts"><span class="sub" id="grid-count"></span>
+        <button class="btn btn-p btn-sm" type="button" id="shop-share" hidden>Bagikan lapak ini</button>
+        <button class="btn btn-g btn-sm" type="button" id="shop-all" hidden>Lihat semua lapak</button></div></div>
     <div class="grid" id="grid"></div>
   </div>
 </main>
@@ -239,6 +246,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--leaf);outline:none}
         <button class="btn btn-g btn-sm" type="button" id="logout">Keluar</button>
       </div>
       <div id="hidden-note" class="notice" hidden><div class="grow"><b>Lapak Anda sedang disembunyikan oleh pengelola.</b> Pembeli belum bisa melihatnya. Hubungi pengelola untuk informasi lebih lanjut.</div></div>
+      <div id="my-link" class="linkbox" hidden>
+        <div class="grow"><b>Link toko Anda</b><code id="my-link-url"></code><span class="small">Kirim ke pelanggan lewat WhatsApp, Instagram, atau status. Yang membuka link langsung melihat lapak Anda saja.</span></div>
+        <button class="btn btn-g btn-sm" type="button" id="my-link-copy">Salin link</button>
+        <button class="btn btn-p btn-sm" type="button" id="my-link-share">Bagikan</button>
+      </div>
       <div class="desk">
         <form class="panel" id="f-shop" novalidate>
           <h2>Profil lapak</h2>

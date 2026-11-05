@@ -30,6 +30,21 @@ const initial = s => (String(s).trim()[0]||"?").toUpperCase();
 const waIntl = n => { let d = String(n||"").replace(/\D/g,""); if (d.startsWith("0")) d = "62"+d.slice(1); else if (d.startsWith("8")) d = "62"+d; return d; };
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2800); }
 
+/* ---------- link toko & produk ---------- */
+const BASE = location.origin + location.pathname;
+const shopLink = s => BASE + "#toko/" + s.id;
+const prodLink = p => BASE + "#produk/" + p.id;
+const setHash = h => { if (location.hash !== h) history.replaceState(null, "", h); };
+const copyText = txt => navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject();
+async function shareLink(url, title, text){
+  if (navigator.share){
+    try { await navigator.share({ title, text, url }); return; }
+    catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  copyText(url).then(() => toast("Link disalin. Tempel di WhatsApp atau media sosial."),
+                     () => window.prompt("Salin link ini:", url));
+}
+
 /* ---------- Supabase ---------- */
 const CFG = window.LAPAK_CONFIG || {};
 const configured = !!(CFG.SUPABASE_URL && CFG.SUPABASE_KEY && window.supabase);
@@ -41,6 +56,7 @@ let shops = [];
 let usingExamples = true;
 let filter = { q:"", cat:"", kel:"", shop:"" };
 let session = null, isAdmin = false, myShop = null, busy = false;
+let shopsLoaded = false, pendingProduct = "", scrollPending = false;
 
 function photo(container, p){
   container.style.background = hueOf((p.kategori||"") + (p.nama||""));
@@ -62,8 +78,12 @@ async function loadShops(){
   const uid = session && session.user.id;
   myShop = uid ? shops.find(s=>s.owner===uid) || null : null;
   usingExamples = shops.filter(s=>s.tampil).length===0 && !isAdmin;
-  if (filter.shop && !source().some(s=>s.id===filter.shop)) filter.shop="";
-  render(); renderDesk();
+  if (filter.shop && !source().some(s=>s.id===filter.shop)){
+    if (location.hash.startsWith("#toko/")){ toast("Lapak tidak ditemukan atau sedang disembunyikan"); setHash("#belanja"); scrollPending=false; }
+    filter.shop="";
+  }
+  shopsLoaded = true;
+  render(); renderDesk(); tryOpenPending(); maybeScroll();
 }
 function source(){ return usingExamples ? EXAMPLES : shops; }
 
@@ -73,7 +93,7 @@ function fillFilters(){
   const chips=$("#kel-chips");
   ["",...KEL].forEach(k=>{
     const b=el("button","chip",k||"Semua"); b.type="button"; b.dataset.k=k;
-    b.onclick=()=>{ filter.kel=k; filter.shop=""; render(); };
+    b.onclick=()=>{ filter.kel=k; filter.shop=""; setHash("#belanja"); render(); };
     chips.appendChild(b);
   });
   const sk=$("#s-kel"); sk.appendChild(new Option("Pilih kelurahan","")); KEL.forEach(k=>sk.appendChild(new Option(k,k)));
@@ -97,7 +117,8 @@ function render(){
     const m=el("span","mono",initial(s.nama)); m.style.background=hueOf(s.nama);
     const t=el("span","t"); t.appendChild(el("b",null,s.nama));
     t.appendChild(el("span",null,`${s.kelurahan} · ${s.produk.length} produk${s.tampil?"":" · disembunyikan"}`));
-    b.append(m,t); b.onclick=()=>{ filter.shop = filter.shop===s.id ? "" : s.id; render(); };
+    b.append(m,t); b.onclick=()=>{ filter.shop = filter.shop===s.id ? "" : s.id;
+      if (!usingExamples) setHash(filter.shop ? "#toko/"+filter.shop : "#belanja"); render(); };
     box.appendChild(b);
   });
   renderGrid();
@@ -110,8 +131,16 @@ function renderGrid(){
     (!filter.kel || s.kelurahan===filter.kel) && (!filter.cat || p.kategori===filter.cat) && (!filter.shop || s.id===filter.shop) &&
     (!filter.q || (p.nama+" "+(p.deskripsi||"")+" "+s.nama).toLowerCase().includes(filter.q)));
   const shopSel = src.find(s=>s.id===filter.shop);
-  $("#grid-title").textContent = shopSel ? shopSel.nama : "Semua produk";
-  $("#grid-count").textContent = f.length + " produk";
+  const waiting = filter.shop && !shopSel && !shopsLoaded;
+  $("#grid-title").textContent = shopSel ? shopSel.nama : waiting ? "Memuat lapak…" : "Semua produk";
+  $("#grid-count").textContent = waiting ? "" : f.length + " produk";
+  const sh=$("#shop-share"), sa=$("#shop-all");
+  sh.hidden = !shopSel || usingExamples; sa.hidden = !shopSel;
+  if (shopSel){
+    sh.onclick=()=>shareLink(shopLink(shopSel), shopSel.nama, `Yuk lihat produk ${shopSel.nama} di Lapak Wonocolo Fiesta:`);
+    sa.onclick=()=>{ filter.shop=""; setHash("#belanja"); render(); };
+  }
+  if (waiting) return;
   if (!f.length){
     const e=el("div","empty"); e.appendChild(el("b",null, items.length ? "Tidak ada produk yang cocok" : "Belum ada produk"));
     e.appendChild(document.createTextNode(items.length ? "Coba kata kunci lain, atau pilih kelurahan dan kategori yang berbeda." : "Produk akan muncul di sini setelah penjual menambahkannya dari menu Lapak Saya."));
@@ -129,7 +158,8 @@ function renderGrid(){
 }
 
 /* ---------- modal ---------- */
-function closeModal(){ $("#modal-root").innerHTML=""; document.removeEventListener("keydown",escClose); }
+function closeModal(){ $("#modal-root").innerHTML=""; document.removeEventListener("keydown",escClose);
+  if (location.hash.startsWith("#produk/")) setHash(filter.shop ? "#toko/"+filter.shop : "#belanja"); }
 function escClose(e){ if (e.key==="Escape") closeModal(); }
 function modal(build){
   const root=$("#modal-root"); root.innerHTML="";
@@ -141,6 +171,7 @@ function modal(build){
 }
 
 function openProduct(p,s){
+  if (!usingExamples) setHash("#produk/"+p.id);
   modal(m=>{
     const ph=el("div","ph"); photo(ph,p); ph.appendChild(el("span","tag",p.kategori)); m.appendChild(ph);
     const inn=el("div","in");
@@ -179,6 +210,11 @@ function openProduct(p,s){
       wl.appendChild(cp); inn.appendChild(wl);
       go=el("a","btn btn-p","Pesan via WhatsApp"); go.target="_blank"; go.rel="noopener";
       row.append(close,go);
+    }
+    if (!usingExamples){
+      const shb=el("button","btn btn-g","Bagikan produk"); shb.type="button";
+      shb.onclick=()=>shareLink(prodLink(p), p.nama, `${p.nama} – ${rupiah(p.harga)} dari ${s.nama} di Lapak Wonocolo Fiesta:`);
+      row.insertBefore(shb, close.nextSibling);
     }
     upd();
     if (isAdmin && !usingExamples){
@@ -237,6 +273,13 @@ function renderDesk(){
   $("#f-auth").hidden=true; $("#desk-wrap").hidden=false;
   $("#who-email").textContent = session.user.email + (isAdmin ? " (pengelola)" : "");
   $("#hidden-note").hidden = !(myShop && !myShop.tampil);
+  $("#my-link").hidden = !myShop;
+  if (myShop){
+    const url=shopLink(myShop), nama=myShop.nama;
+    $("#my-link-url").textContent=url;
+    $("#my-link-copy").onclick=()=>copyText(url).then(()=>toast("Link toko disalin"),()=>window.prompt("Salin link ini:",url));
+    $("#my-link-share").onclick=()=>shareLink(url, nama, `Yuk lihat produk ${nama} di Lapak Wonocolo Fiesta:`);
+  }
   const s=myShop||{};
   const set=(id,v)=>{ const e=$(id); if (document.activeElement!==e) e.value=v||""; };
   set("#s-nama",s.nama); set("#s-pemilik",s.pemilik); set("#s-kel",s.kelurahan); set("#s-wa",s.wa); set("#s-alamat",s.alamat); set("#s-desk",s.deskripsi);
@@ -260,7 +303,9 @@ function renderDesk(){
       if (p.foto_path) sb.storage.from(BUCKET).remove([p.foto_path]);
       toast("Produk dihapus"); loadShops();
     };
-    a.append(e,d); it.append(ph,t,a); pl.appendChild(it);
+    const sh=el("button","btn btn-g btn-sm","Bagikan"); sh.type="button";
+    sh.onclick=()=>shareLink(prodLink(p), p.nama, `${p.nama} – ${rupiah(p.harga)} dari ${myShop.nama} di Lapak Wonocolo Fiesta:`);
+    a.append(sh,e,d); it.append(ph,t,a); pl.appendChild(it);
   });
 }
 
@@ -354,14 +399,39 @@ function editProduct(orig){
 }
 
 /* ---------- routing ---------- */
+// Link khusus: #toko/<id> membuka satu lapak, #produk/<id> membuka satu produk.
+function applyHash(){
+  let h=location.hash; try { h=decodeURIComponent(h); } catch {}
+  let m;
+  if ((m=h.match(/^#toko\/(.+)$/))){
+    filter.shop=m[1]; filter.kel=""; filter.cat=""; filter.q="";
+    $("#q").value=""; $("#cat").value=""; scrollPending=true;
+  } else if ((m=h.match(/^#produk\/(.+)$/))){
+    pendingProduct=m[1]; scrollPending=true;
+  }
+}
+function tryOpenPending(){
+  if (!pendingProduct || !shopsLoaded) return;
+  const id=pendingProduct; pendingProduct="";
+  for (const s of source()){
+    const p=s.produk.find(x=>String(x.id)===id);
+    if (p){ filter.shop=s.id; render(); openProduct(p,s); return; }
+  }
+  toast("Produk tidak ditemukan atau sudah dihapus"); setHash("#belanja");
+}
+function maybeScroll(){
+  if (!scrollPending || !shopsLoaded) return;
+  scrollPending=false; $("#grid-head").scrollIntoView({block:"start"});
+}
 function route(){
   const lapak = location.hash==="#lapak-saya";
   $("#view-belanja").hidden=lapak; $("#view-lapak").hidden=!lapak;
   $("#tab-belanja").setAttribute("aria-current",lapak?"false":"page");
   $("#tab-lapak").setAttribute("aria-current",lapak?"page":"false");
   if (lapak) renderDesk();
+  else { applyHash(); render(); tryOpenPending(); maybeScroll(); }
 }
-addEventListener("hashchange",()=>{ route(); scrollTo(0,0); });
+addEventListener("hashchange",()=>{ const deep=/^#(toko|produk)\//.test(location.hash); route(); if(!deep) scrollTo(0,0); });
 
 /* ---------- start ---------- */
 fillFilters(); render(); route(); renderDesk();
